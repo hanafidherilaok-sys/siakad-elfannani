@@ -1620,10 +1620,69 @@
             triggerPDFDownload('LAPORAN ABSENSI HARIAN', 'Laporan_Absen_Harian.pdf');
         }
 
-        function cetakPDFRekapKeseluruhan() {
+       function cetakPDFRekapKeseluruhan() {
             const wrapper = document.getElementById('pdf-table-wrapper');
-            wrapper.innerHTML = `<p style="text-align:center;">Laporan Rekapitulasi Keseluruhan Absensi Santri</p>`;
-            triggerPDFDownload('REKAPITULASI ABSENSI KESELURUHAN', 'Rekap_Absensi.pdf');
+            if (!window.kelasData || window.kelasData.length === 0) {
+                wrapper.innerHTML = `<p style="text-align:center; font-size:12px;">Belum ada data kelas dan absensi untuk direkap.</p>`;
+                triggerPDFDownload('REKAPITULASI ABSENSI KESELURUHAN', 'Rekap_Absensi_Keseluruhan.pdf');
+                return;
+            }
+
+            let htmlContent = '';
+            window.kelasData.forEach(kelas => {
+                const namaKelas = kelas.nama || kelas.KELAS || 'Kelas';
+                const namaUstadz = getNamaUstadz(kelas);
+                const listSantri = window.santriData.filter(s => s.kelasId === kelas.id);
+                let rows = '';
+
+                if (listSantri.length === 0) {
+                    rows = `<tr><td colspan="7" style="text-align:center; color:#6b7280;">Tidak ada santri di kelas ini.</td></tr>`;
+                } else {
+                    listSantri.forEach((santri, idx) => {
+                        const santriAbs = window.absensiData.filter(a => a.santriId === santri.id);
+                        const countHadir = santriAbs.filter(a => a.status === 'Hadir').length;
+                        const countSakit = santriAbs.filter(a => a.status === 'Izin Sakit').length;
+                        const countPulang = santriAbs.filter(a => a.status === 'Izin Pulang').length;
+                        const countJagaPos = santriAbs.filter(a => a.status === 'Izin Jaga Pos').length;
+                        const countAlpa = santriAbs.filter(a => a.status === 'Alpa').length;
+
+                        rows += `
+                            <tr>
+                                <td style="text-align:center;">${idx + 1}</td>
+                                <td>${santri.nama}</td>
+                                <td style="text-align:center;">${countHadir}</td>
+                                <td style="text-align:center;">${countSakit}</td>
+                                <td style="text-align:center;">${countPulang}</td>
+                                <td style="text-align:center;">${countJagaPos}</td>
+                                <td style="text-align:center; font-weight:bold;">${countAlpa}</td>
+                            </tr>
+                        `;
+                    });
+                }
+
+                htmlContent += `
+                    <div class="pdf-kelas-block">
+                        <div class="pdf-kelas-header">Kelas: ${namaKelas} &mdash; Pengampu: ${namaUstadz} (${listSantri.length} Santri)</div>
+                        <table class="pdf-table" style="margin-top:0;">
+                            <thead>
+                                <tr>
+                                    <th style="width:32px;">No</th>
+                                    <th>Nama Santri</th>
+                                    <th style="width:52px;">Hadir</th>
+                                    <th style="width:52px;">Sakit</th>
+                                    <th style="width:52px;">Pulang</th>
+                                    <th style="width:65px;">Jaga Pos</th>
+                                    <th style="width:52px;">Alpa</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>
+                `;
+            });
+
+            wrapper.innerHTML = htmlContent;
+            triggerPDFDownload('REKAPITULASI ABSENSI KESELURUHAN', 'Rekap_Absensi_Keseluruhan.pdf');
         }
 
         function openModalLogoSettings() {
