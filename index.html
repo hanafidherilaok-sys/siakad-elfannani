@@ -60,6 +60,9 @@
                 if (document.getElementById('page-kelas') && !document.getElementById('page-kelas').classList.contains('hidden')) {
                     if (typeof window.renderKelasGrid === 'function') window.renderKelasGrid();
                 }
+                if (document.getElementById('page-rekap') && !document.getElementById('page-rekap').classList.contains('hidden')) {
+                    if (typeof window.renderRekapTab === 'function') window.renderRekapTab();
+                }
                 if (typeof window.renderDashboard === 'function') window.renderDashboard();
             });
 
@@ -69,6 +72,9 @@
                 localStorage.setItem('elfannani_santri', JSON.stringify(window.santriData));
                 if (document.getElementById('page-santri') && !document.getElementById('page-santri').classList.contains('hidden')) {
                     if (typeof window.renderSantriTable === 'function') window.renderSantriTable();
+                }
+                if (document.getElementById('page-rekap') && !document.getElementById('page-rekap').classList.contains('hidden')) {
+                    if (typeof window.renderRekapTab === 'function') window.renderRekapTab();
                 }
                 if (typeof window.renderDashboard === 'function') window.renderDashboard();
             });
@@ -80,6 +86,9 @@
                 if (typeof window.renderDashboard === 'function') window.renderDashboard();
                 if (document.getElementById('page-absen') && !document.getElementById('page-absen').classList.contains('hidden')) {
                     if (typeof window.loadTodayAttendance === 'function') window.loadTodayAttendance();
+                }
+                if (document.getElementById('page-rekap') && !document.getElementById('page-rekap').classList.contains('hidden')) {
+                    if (typeof window.renderRekapTab === 'function') window.renderRekapTab();
                 }
             });
         }
@@ -135,13 +144,18 @@
             font-family: 'Inter', sans-serif;
             background-color: #f3f4f6;
         }
+        /* Container PDF offscreen agar tidak terpotong layar HP saat dirender html2canvas */
         #pdf-template-container {
-            display: none;
+            position: fixed;
+            left: -9999px;
+            top: 0;
+            width: 794px;
+            background: white;
+            z-index: -1;
         }
         .pdf-page {
-            width: 210mm;
-            min-height: 295mm;
-            padding: 12mm 15mm;
+            width: 100%;
+            padding: 10px 15px;
             background: white;
             color: #1f2937;
             font-family: 'Times New Roman', Times, serif;
@@ -149,17 +163,22 @@
         }
         .pdf-kop-line {
             border-bottom: 3px double #047857;
-            margin-bottom: 15px;
+            margin-bottom: 14px;
             padding-bottom: 10px;
         }
         .pdf-table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 10px;
+            margin-top: 8px;
+            margin-bottom: 14px;
             font-size: 11px;
             page-break-inside: auto;
         }
+        .pdf-table thead {
+            display: table-header-group;
+        }
         .pdf-table tr {
+            break-inside: avoid;
             page-break-inside: avoid;
             page-break-after: auto;
         }
@@ -176,14 +195,33 @@
         .pdf-table td {
             border: 1px solid #d1d5db;
             padding: 6px;
+            vertical-align: middle;
         }
         .pdf-table tr:nth-child(even) td {
             background-color: #f9fafb !important;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
         }
+        .pdf-kelas-block {
+            margin-bottom: 18px;
+        }
+        .pdf-kelas-header {
+            background-color: #ecfdf5 !important;
+            border: 1px solid #047857;
+            border-bottom: none;
+            padding: 6px 10px;
+            font-weight: bold;
+            font-size: 12px;
+            color: #065f46;
+            break-after: avoid;
+            page-break-after: avoid;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
         .pdf-footer-block {
+            break-inside: avoid;
             page-break-inside: avoid;
+            margin-top: 24px;
         }
     </style>
 </head>
@@ -753,8 +791,8 @@
         </div>
     </div>
 
-    <!-- HIDDEN TEMPLATE FOR FORMAL PDF REPORT -->
-    <div id="pdf-template-container" class="hidden">
+    <!-- HIDDEN TEMPLATE FOR FORMAL PDF REPORT (OFFSCREEN AGAR LAYOUT A4 PRESISI DI HP & PC) -->
+    <div id="pdf-template-container">
         <div id="pdf-content" class="pdf-page">
             <div class="pdf-kop-line flex items-center justify-between">
                 <div class="w-20 h-20 flex-shrink-0 flex items-center justify-center overflow-hidden">
@@ -772,12 +810,12 @@
                 <p id="pdf-report-subtitle" class="text-xs italic text-gray-600 mt-1">-</p>
             </div>
             <div id="pdf-table-wrapper" class="my-3"></div>
-            <div class="pdf-footer-block mt-8 flex justify-end text-xs">
+            <div class="pdf-footer-block flex justify-end text-xs">
                 <div class="text-center w-64">
                     <p>Bangkalan, <span id="pdf-date-stamp">-- -- ----</span></p>
                     <p class="font-bold mt-1 text-emerald-900">Pengasuh / Kepala Kursus</p>
                     <p class="font-bold uppercase text-amber-600">Metode El-Fannani</p>
-                    <div class="h-16"></div>
+                    <div class="h-14"></div>
                     <p class="font-bold underline text-sm text-gray-900">( Ust. Pengasuh El-Fannani )</p>
                 </div>
             </div>
@@ -847,6 +885,11 @@
             return `${parseInt(parts[2], 10)} ${months[parseInt(parts[1], 10) - 1]} ${parts[0]}`;
         }
 
+        function getNamaUstadz(kelas) {
+            if (!kelas) return 'Ust. Pengampu';
+            return kelas.ustadz || kelas.USTADZ || kelas.ustdh || kelas.pengampu || kelas.guru || 'Ust. Pengampu';
+        }
+
         function handleLogin(event) {
             event.preventDefault();
             const inputPass = document.getElementById('login-password').value;
@@ -914,11 +957,6 @@
             document.getElementById('dashboard-date-display').textContent = formatDateIndonesian(getTodayISOString());
             renderDashboard();
             populateKelasDropdowns();
-        }
-
-        function getNamaUstadz(kelas) {
-            if (!kelas) return 'Ust. Pengampu';
-            return kelas.ustadz || kelas.USTADZ || kelas.ustdh || kelas.pengampu || kelas.guru || 'Ust. Pengampu';
         }
 
         function renderDashboard() {
@@ -1004,7 +1042,7 @@
             window.kelasData.forEach(kelas => {
                 const namaKelas = kelas.nama || kelas.KELAS || 'Tanpa Nama';
                 const namaUstadz = getNamaUstadz(kelas);
-                const jumlahSantri = window.santriData.filter(s => s.kelasId === kelas.id || (s.kelas && s.kelas.toLowerCase() === namaKelas.toLowerCase())).length;
+                const jumlahSantri = window.santriData.filter(s => s.kelasId === kelas.id).length;
 
                 const card = document.createElement('div');
                 card.className = 'bg-white p-5 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition flex flex-col justify-between';
@@ -1026,7 +1064,7 @@
                 `;
                 container.appendChild(card);
             });
-        }
+        };
 
         function openModalTambahKelas() {
             document.getElementById('input-nama-kelas').value = '';
@@ -1060,7 +1098,7 @@
             document.getElementById('modal-detail-kelas-title').textContent = `Kelas: ${namaKelas}`;
             document.getElementById('modal-detail-kelas-subtitle').textContent = `Pengampu: ${namaUstadz}`;
 
-            const listSantri = window.santriData.filter(s => s.kelasId === kelasId || (s.kelas && s.kelas.toLowerCase() === namaKelas.toLowerCase()));
+            const listSantri = window.santriData.filter(s => s.kelasId === kelasId);
             document.getElementById('modal-detail-kelas-count').textContent = `Total: ${listSantri.length} Santri`;
 
             const tbody = document.getElementById('modal-detail-kelas-tbody');
@@ -1080,10 +1118,12 @@
                 });
             }
             document.getElementById('modal-detail-kelas').classList.remove('hidden');
-        }
+        };
 
         function hapusKelas(kelasId) {
             if (confirm('Hapus kelas ini beserta seluruh santri di dalamnya?')) {
+                const santriToRemove = window.santriData.filter(s => s.kelasId === kelasId);
+                santriToRemove.forEach(s => { if (window.deleteFromFirestore) window.deleteFromFirestore('santri', s.id); });
                 window.kelasData = window.kelasData.filter(k => k.id !== kelasId);
                 window.santriData = window.santriData.filter(s => s.kelasId !== kelasId);
                 saveDataToStorage();
@@ -1133,10 +1173,17 @@
                         const ustadz = ustadzKey && r[ustadzKey] !== undefined ? String(r[ustadzKey]).trim() : 'Ust. Pengampu';
 
                         if (nama && nama.toLowerCase() !== 'kelas') {
-                            const obj = { id: 'K_' + Date.now() + '_' + Math.floor(Math.random() * 1000), nama, ustadz };
-                            window.kelasData.push(obj);
-                            if (window.saveToFirestore) window.saveToFirestore('kelas', obj);
-                            count++;
+                            const exists = window.kelasData.find(k => {
+                                const kNama = (k.nama || k.KELAS || '').trim().toLowerCase();
+                                const kUst = getNamaUstadz(k).trim().toLowerCase();
+                                return kNama === nama.toLowerCase() && kUst === ustadz.toLowerCase();
+                            });
+                            if (!exists) {
+                                const obj = { id: 'K_' + Date.now() + '_' + Math.floor(Math.random() * 10000), nama, ustadz };
+                                window.kelasData.push(obj);
+                                if (window.saveToFirestore) window.saveToFirestore('kelas', obj);
+                                count++;
+                            }
                         }
                     });
                     saveDataToStorage();
@@ -1170,7 +1217,7 @@
                         const nisKey = keys.find(k => k.trim().toLowerCase().includes('nis') || k.trim().toLowerCase().includes('induk')) || keys[0];
                         const namaKey = keys.find(k => (k.trim().toLowerCase().includes('nama') || k.trim().toLowerCase().includes('santri')) && !k.trim().toLowerCase().includes('kelas')) || keys[1];
                         const kelasKey = keys.find(k => k.trim().toLowerCase().includes('kelas') || k.trim().toLowerCase().includes('ruang')) || keys[2];
-                        const ustadzKey = keys.find(k => k.trim().toLowerCase().includes('ustadz') || k.trim().toLowerCase().includes('guru') || k.trim().toLowerCase().includes('pengampu')) || keys[3];
+                        const ustadzKey = keys.find(k => k.trim().toLowerCase().includes('ustadz') || k.trim().toLowerCase().includes('guru') || k.trim().toLowerCase().includes('pengampu') || k.trim().toLowerCase().includes('pengajar')) || keys[3];
 
                         const nis = nisKey && r[nisKey] !== undefined ? String(r[nisKey]).trim() : '-';
                         const nama = namaKey && r[namaKey] !== undefined ? String(r[namaKey]).trim() : '';
@@ -1178,20 +1225,14 @@
                         const ustadz = ustadzKey && r[ustadzKey] !== undefined ? String(r[ustadzKey]).trim() : 'Ust. Pengampu';
 
                         if (nama && nama.toLowerCase() !== 'nama santri') {
-                            // KUNCI UTAMA: Cari kelas berdasarkan KESAMAAN NAMA KELAS DAN NAMA USTADZ SEKALIGUS
                             let target = window.kelasData.find(k => {
                                 const kNama = (k.nama || k.KELAS || '').trim().toLowerCase();
-                                const kUst = (k.ustadz || k.USTADZ || k.ustdh || k.pengampu || '').trim().toLowerCase();
+                                const kUst = getNamaUstadz(k).trim().toLowerCase();
                                 return kNama === kelasNama.toLowerCase() && kUst === ustadz.toLowerCase();
                             });
 
-                            // Jika kombinasi kelas & ustadz belum ada, buat kelas baru yang unik
                             if (!target) {
-                                target = { 
-                                    id: 'K_' + Date.now() + '_' + Math.floor(Math.random()*10000), 
-                                    nama: kelasNama, 
-                                    ustadz: ustadz 
-                                };
+                                target = { id: 'K_' + Date.now() + '_' + Math.floor(Math.random()*10000), nama: kelasNama, ustadz: ustadz };
                                 window.kelasData.push(target);
                                 if (window.saveToFirestore) window.saveToFirestore('kelas', target);
                             }
@@ -1209,14 +1250,13 @@
                         }
                     });
 
-                    window.saveDataToStorage();
-                    window.populateKelasDropdowns();
-                    window.renderSantriTable();
-                    window.renderKelasGrid();
-                    window.renderDashboard();
+                    saveDataToStorage();
+                    populateKelasDropdowns();
+                    renderSantriTable();
+                    renderKelasGrid();
+                    renderDashboard();
                     alert(`Alhamdulillah! Berhasil mengimpor ${count} santri dengan pemisahan ustadz yang akurat.`);
                 } catch (err) {
-                    console.error(err);
                     alert('Gagal membaca file Excel Santri.');
                 }
             };
@@ -1238,14 +1278,11 @@
             }
         }
 
-        // FUNGSI RESET SEMUA DATA KELAS (DILENGKAPI PENGHAPUSAN PERMANEN KE FIREBASE CLOUD)
         function resetSemuaData() {
             if (confirm('Hapus SELURUH data kelas dan santri dari Web dan Firebase Cloud Database?')) {
-                // 1. Hapus kelas dari Firebase Cloud
                 window.kelasData.forEach(k => { 
                     if (window.deleteFromFirestore) window.deleteFromFirestore('kelas', k.id); 
                 });
-                // 2. Hapus santri dari Firebase Cloud
                 window.santriData.forEach(s => { 
                     if (window.deleteFromFirestore) window.deleteFromFirestore('santri', s.id); 
                 });
@@ -1378,17 +1415,20 @@
         function hapusSantri(santriId) {
             if (confirm('Hapus santri ini?')) {
                 window.santriData = window.santriData.filter(s => s.id !== santriId);
-                window.absensiData = window.absensiData.filter(a => a.id !== santriId);
+                window.absensiData = window.absensiData.filter(a => a.santriId !== santriId);
                 saveDataToStorage();
                 if (window.deleteFromFirestore) window.deleteFromFirestore('santri', santriId);
                 renderSantriTable();
+                if (activeDetailKelasId && !document.getElementById('modal-detail-kelas').classList.contains('hidden')) {
+                    openDetailKelas(activeDetailKelasId);
+                }
             }
         }
 
         function handleAbsenSearchAutocomplete(query) {
             const listContainer = document.getElementById('absen-autocomplete-list');
             if (!query.trim()) { listContainer.classList.add('hidden'); return; }
-            const matches = window.santriData.filter(s => s.nama.toLowerCase().includes(query.toLowerCase().trim())).slice(0, 5);
+            const matches = window.santriData.filter(s => s.nama.toLowerCase().includes(query.toLowerCase().trim())).slice(0, 8);
             listContainer.innerHTML = '';
 
             matches.forEach(santri => {
@@ -1397,8 +1437,8 @@
                 const namaUstadz = getNamaUstadz(kelas);
 
                 const item = document.createElement('div');
-                item.className = "p-3 hover:bg-emerald-50 cursor-pointer border-b text-xs flex justify-between";
-                item.innerHTML = `<span><strong>${santri.nama}</strong></span><span class="text-gray-500">${namaKelas}</span>`;
+                item.className = "p-3 hover:bg-emerald-50 cursor-pointer border-b text-xs flex justify-between items-center";
+                item.innerHTML = `<span><strong>${santri.nama}</strong></span><span class="text-gray-500 text-right">${namaKelas}<br><span class="text-[10px] text-emerald-700">${namaUstadz}</span></span>`;
                 item.onclick = function() {
                     document.getElementById('absen-search-santri').value = santri.nama;
                     document.getElementById('absen-selected-santri-id').value = santri.id;
@@ -1466,7 +1506,72 @@
             renderDashboard();
         }
 
-        function renderRekapTab() {
+        // RENDER TOP GLOBAL SANTRI SERING TIDAK MASUK & REKAP PER KELAS
+        window.renderRekapTab = function() {
+            // 1. Render Peringkat Top Global Santri Sering Tidak Masuk (Izin + Alpa)
+            const globalContainer = document.getElementById('global-frequent-absentees');
+            if (globalContainer) {
+                const absenteeStats = [];
+                window.santriData.forEach(santri => {
+                    const santriAbs = window.absensiData.filter(a => a.santriId === santri.id);
+                    const sakit = santriAbs.filter(a => a.status === 'Izin Sakit').length;
+                    const pulang = santriAbs.filter(a => a.status === 'Izin Pulang').length;
+                    const jagaPos = santriAbs.filter(a => a.status === 'Izin Jaga Pos').length;
+                    const alpa = santriAbs.filter(a => a.status === 'Alpa').length;
+                    const totalTidakMasuk = sakit + pulang + jagaPos + alpa;
+
+                    if (totalTidakMasuk > 0) {
+                        const kelas = window.kelasData.find(k => k.id === santri.kelasId);
+                        absenteeStats.push({
+                            santri,
+                            namaKelas: kelas ? (kelas.nama || kelas.KELAS || '-') : '-',
+                            namaUstadz: getNamaUstadz(kelas),
+                            sakit,
+                            pulang,
+                            jagaPos,
+                            alpa,
+                            totalTidakMasuk
+                        });
+                    }
+                });
+
+                // Urutkan dari yang paling sering tidak masuk (Alpa diprioritaskan jika total sama)
+                absenteeStats.sort((a, b) => {
+                    if (b.totalTidakMasuk !== a.totalTidakMasuk) return b.totalTidakMasuk - a.totalTidakMasuk;
+                    return b.alpa - a.alpa;
+                });
+
+                const topList = absenteeStats.slice(0, 6);
+                globalContainer.innerHTML = '';
+
+                if (topList.length === 0) {
+                    globalContainer.innerHTML = `<div class="col-span-full text-center text-xs text-amber-800/70 py-3">Belum ada catatan ketidakhadiran (Izin / Alpa) santri.</div>`;
+                } else {
+                    topList.forEach((item, index) => {
+                        const totalIzin = item.sakit + item.pulang + item.jagaPos;
+                        globalContainer.innerHTML += `
+                            <div class="bg-white border border-amber-200 rounded-xl p-3.5 shadow-sm flex items-start justify-between gap-2">
+                                <div class="flex items-start space-x-2.5">
+                                    <span class="w-6 h-6 rounded-full bg-amber-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">${index + 1}</span>
+                                    <div>
+                                        <p class="font-bold text-sm text-gray-800 leading-tight">${item.santri.nama}</p>
+                                        <p class="text-[11px] text-gray-500 mt-0.5">${item.namaKelas} &bull; ${item.namaUstadz}</p>
+                                        <div class="flex flex-wrap gap-1.5 mt-1.5 text-[10px] font-semibold">
+                                            <span class="bg-red-100 text-red-700 px-2 py-0.5 rounded">Alpa: ${item.alpa}x</span>
+                                            <span class="bg-amber-100 text-amber-800 px-2 py-0.5 rounded">Izin: ${totalIzin}x</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="text-right flex-shrink-0">
+                                    <span class="text-xs font-extrabold text-red-600 bg-red-50 border border-red-200 px-2 py-1 rounded-lg">${item.totalTidakMasuk}x</span>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+            }
+
+            // 2. Render Rekapitulasi Per Kelas
             const container = document.getElementById('rekap-kelas-list');
             if (!container) return;
             container.innerHTML = '';
@@ -1474,7 +1579,7 @@
             window.kelasData.forEach(kelas => {
                 const namaKelas = kelas.nama || kelas.KELAS || 'Kelas';
                 const namaUstadz = getNamaUstadz(kelas);
-                const listSantri = window.santriData.filter(s => s.kelasId === kelas.id || (s.kelas && s.kelas.toLowerCase() === namaKelas.toLowerCase()));
+                const listSantri = window.santriData.filter(s => s.kelasId === kelas.id);
                 let rows = '';
 
                 listSantri.forEach(santri => {
@@ -1502,75 +1607,179 @@
                         <div class="p-4 bg-emerald-800 text-white flex justify-between items-center">
                             <h3 class="font-bold text-base">${namaKelas} (${namaUstadz})</h3>
                         </div>
-                        <table class="w-full text-left text-xs">
-                            <thead>
-                                <tr class="bg-gray-100 text-gray-600 uppercase border-b">
-                                    <th class="p-3">Nama Santri</th>
-                                    <th class="p-3 text-center">Hadir</th>
-                                    <th class="p-3 text-center">Sakit</th>
-                                    <th class="p-3 text-center">Pulang</th>
-                                    <th class="p-3 text-center">Jaga Pos</th>
-                                    <th class="p-3 text-center">Alpa</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y">${rows || '<tr><td colspan="6" class="p-4 text-center text-gray-400">Tidak ada santri.</td></tr>'}</tbody>
-                        </table>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs">
+                                <thead>
+                                    <tr class="bg-gray-100 text-gray-600 uppercase border-b">
+                                        <th class="p-3">Nama Santri</th>
+                                        <th class="p-3 text-center">Hadir</th>
+                                        <th class="p-3 text-center">Sakit</th>
+                                        <th class="p-3 text-center">Pulang</th>
+                                        <th class="p-3 text-center">Jaga Pos</th>
+                                        <th class="p-3 text-center">Alpa</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y">${rows || '<tr><td colspan="6" class="p-4 text-center text-gray-400">Tidak ada santri.</td></tr>'}</tbody>
+                            </table>
+                        </div>
                     </div>
                 `;
             });
-        }
+        };
 
-        function triggerPDFDownload(title, filename) {
+        // FUNGSI DOWNLOAD PDF YANG DIPERBAIKI AGAR TIDAK TERPOTONG & BERFUNGSI DI SEMUA MENU
+        function triggerPDFDownload(title, filename, customSubtitle) {
             document.getElementById('pdf-report-title').textContent = title;
-            document.getElementById('pdf-report-subtitle').textContent = `Tanggal: ${formatDateIndonesian(getTodayISOString())}`;
+            document.getElementById('pdf-report-subtitle').textContent = customSubtitle || `Tanggal Cetak: ${formatDateIndonesian(getTodayISOString())}`;
             document.getElementById('pdf-date-stamp').textContent = formatDateIndonesian(getTodayISOString());
 
             const element = document.getElementById('pdf-content');
-            const container = document.getElementById('pdf-template-container');
-            container.classList.remove('hidden');
 
             const opt = {
-                margin: 0,
+                margin: [12, 10, 14, 10], // Margin atas, kanan, bawah, kiri (mm) agar setiap halaman rapi & tidak terpotong
                 filename: filename || 'Laporan.pdf',
                 image: { type: 'jpeg', quality: 0.98 },
-                html2canvas: { scale: 2, useCORS: true },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                html2canvas: {
+                    scale: 2,
+                    useCORS: true,
+                    windowWidth: 820,
+                    scrollX: 0,
+                    scrollY: 0
+                },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+                pagebreak: {
+                    mode: ['avoid-all', 'css', 'legacy'],
+                    avoid: ['tr', '.pdf-footer-block', '.pdf-kop-line']
+                }
             };
 
-            html2pdf().set(opt).from(element).save().then(() => {
-                container.classList.add('hidden');
-            }).catch(() => {
-                container.classList.add('hidden');
+            html2pdf().set(opt).from(element).save().catch(err => {
+                console.error('Gagal membuat PDF:', err);
+                alert('Terjadi kendala saat menyiapkan PDF. Silakan coba lagi.');
             });
         }
-        
+
         function cetakDataSantriLaporan() {
             const filtered = getFilteredSantriList();
             const wrapper = document.getElementById('pdf-table-wrapper');
             let rows = '';
 
-            filtered.forEach((santri, i) => {
-                const kelas = window.kelasData.find(k => k.id === santri.kelasId);
-                const namaKelas = kelas ? (kelas.nama || kelas.KELAS || '-') : '-';
-                const namaUstadz = getNamaUstadz(kelas);
-                rows += `<tr><td style="text-align:center;">${i + 1}</td><td style="text-align:center;">${santri.nis || '-'}</td><td>${santri.nama}</td><td>${namaKelas}</td><td>${namaUstadz}</td></tr>`;
-            });
+            if (filtered.length === 0) {
+                rows = `<tr><td colspan="5" style="text-align:center;">Tidak ada data santri.</td></tr>`;
+            } else {
+                filtered.forEach((santri, i) => {
+                    const kelas = window.kelasData.find(k => k.id === santri.kelasId);
+                    const namaKelas = kelas ? (kelas.nama || kelas.KELAS || '-') : '-';
+                    const namaUstadz = getNamaUstadz(kelas);
+                    rows += `<tr><td style="text-align:center;">${i + 1}</td><td style="text-align:center;">${santri.nis || '-'}</td><td>${santri.nama}</td><td>${namaKelas}</td><td>${namaUstadz}</td></tr>`;
+                });
+            }
 
-            wrapper.innerHTML = `<table class="pdf-table"><thead><tr><th>No</th><th>NIS</th><th>Nama Santri</th><th>Kelas</th><th>Ustadz</th></tr></thead><tbody>${rows}</tbody></table>`;
+            wrapper.innerHTML = `<table class="pdf-table"><thead><tr><th style="width:35px;">No</th><th style="width:80px;">NIS</th><th>Nama Santri</th><th>Kelas</th><th>Ustadz / Ustadzah</th></tr></thead><tbody>${rows}</tbody></table>`;
             triggerPDFDownload('LAPORAN DATA SANTRI', 'Laporan_Data_Santri.pdf');
         }
 
-        function cetakPDFKelasAktif() {
-            if (!activeDetailKelasId) {
-                alert('Tidak ada kelas yang aktif!');
+        function cetakPDFHariIni() {
+            const selectedDate = document.getElementById('absen-date-picker').value || getTodayISOString();
+            const list = window.absensiData.filter(a => a.tanggal === selectedDate);
+            const wrapper = document.getElementById('pdf-table-wrapper');
+            let rows = '';
+
+            if (list.length === 0) {
+                rows = `<tr><td colspan="5" style="text-align:center;">Belum ada catatan absensi pada tanggal ini.</td></tr>`;
+            } else {
+                list.forEach((abs, i) => {
+                    const santri = window.santriData.find(s => s.id === abs.santriId);
+                    const kelas = santri ? window.kelasData.find(k => k.id === santri.kelasId) : null;
+                    const namaKelas = kelas ? (kelas.nama || kelas.KELAS || '-') : '-';
+                    const namaUstadz = getNamaUstadz(kelas);
+                    rows += `<tr>
+                        <td style="text-align:center;">${i + 1}</td>
+                        <td>${santri ? santri.nama : '-'}</td>
+                        <td>${namaKelas}</td>
+                        <td>${namaUstadz}</td>
+                        <td style="text-align:center; font-weight:bold;">${abs.status}</td>
+                    </tr>`;
+                });
+            }
+
+            wrapper.innerHTML = `<table class="pdf-table"><thead><tr><th style="width:35px;">No</th><th>Nama Santri</th><th>Kelas</th><th>Ustadz / Ustadzah</th><th style="width:95px;">Status</th></tr></thead><tbody>${rows}</tbody></table>`;
+            triggerPDFDownload('LAPORAN ABSENSI HARIAN', `Laporan_Absen_Harian_${selectedDate}.pdf`, `Tanggal Absensi: ${formatDateIndonesian(selectedDate)}`);
+        }
+
+        function cetakPDFRekapKeseluruhan() {
+            const wrapper = document.getElementById('pdf-table-wrapper');
+            if (!window.kelasData || window.kelasData.length === 0) {
+                wrapper.innerHTML = `<p style="text-align:center; font-size:12px;">Belum ada data kelas dan absensi untuk direkap.</p>`;
+                triggerPDFDownload('REKAPITULASI ABSENSI KESELURUHAN', 'Rekap_Absensi_Keseluruhan.pdf');
                 return;
             }
+
+            let htmlContent = '';
+            window.kelasData.forEach(kelas => {
+                const namaKelas = kelas.nama || kelas.KELAS || 'Kelas';
+                const namaUstadz = getNamaUstadz(kelas);
+                const listSantri = window.santriData.filter(s => s.kelasId === kelas.id);
+                let rows = '';
+
+                if (listSantri.length === 0) {
+                    rows = `<tr><td colspan="7" style="text-align:center; color:#6b7280;">Tidak ada santri di kelas ini.</td></tr>`;
+                } else {
+                    listSantri.forEach((santri, idx) => {
+                        const santriAbs = window.absensiData.filter(a => a.santriId === santri.id);
+                        const countHadir = santriAbs.filter(a => a.status === 'Hadir').length;
+                        const countSakit = santriAbs.filter(a => a.status === 'Izin Sakit').length;
+                        const countPulang = santriAbs.filter(a => a.status === 'Izin Pulang').length;
+                        const countJagaPos = santriAbs.filter(a => a.status === 'Izin Jaga Pos').length;
+                        const countAlpa = santriAbs.filter(a => a.status === 'Alpa').length;
+
+                        rows += `
+                            <tr>
+                                <td style="text-align:center;">${idx + 1}</td>
+                                <td>${santri.nama}</td>
+                                <td style="text-align:center;">${countHadir}</td>
+                                <td style="text-align:center;">${countSakit}</td>
+                                <td style="text-align:center;">${countPulang}</td>
+                                <td style="text-align:center;">${countJagaPos}</td>
+                                <td style="text-align:center; font-weight:bold;">${countAlpa}</td>
+                            </tr>
+                        `;
+                    });
+                }
+
+                htmlContent += `
+                    <div class="pdf-kelas-block">
+                        <div class="pdf-kelas-header">Kelas: ${namaKelas} &mdash; Pengampu: ${namaUstadz} (${listSantri.length} Santri)</div>
+                        <table class="pdf-table" style="margin-top:0;">
+                            <thead>
+                                <tr>
+                                    <th style="width:32px;">No</th>
+                                    <th>Nama Santri</th>
+                                    <th style="width:52px;">Hadir</th>
+                                    <th style="width:52px;">Sakit</th>
+                                    <th style="width:52px;">Pulang</th>
+                                    <th style="width:65px;">Jaga Pos</th>
+                                    <th style="width:52px;">Alpa</th>
+                                </tr>
+                            </thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>
+                `;
+            });
+
+            wrapper.innerHTML = htmlContent;
+            triggerPDFDownload('REKAPITULASI ABSENSI KESELURUHAN', 'Rekap_Absensi_Keseluruhan.pdf');
+        }
+
+        function cetakPDFKelasAktif() {
+            if (!activeDetailKelasId) return;
             const kelas = window.kelasData.find(k => k.id === activeDetailKelasId);
             if (!kelas) return;
 
             const namaKelas = kelas.nama || kelas.KELAS || 'Kelas';
             const namaUstadz = getNamaUstadz(kelas);
-            const listSantri = window.santriData.filter(s => s.kelasId === activeDetailKelasId || (s.kelas && s.kelas.toLowerCase() === namaKelas.toLowerCase()));
+            const listSantri = window.santriData.filter(s => s.kelasId === activeDetailKelasId);
 
             const wrapper = document.getElementById('pdf-table-wrapper');
             let rows = '';
@@ -1586,7 +1795,7 @@
             wrapper.innerHTML = `
                 <div style="margin-bottom: 10px; font-size: 12px;">
                     <strong>Nama Kelas:</strong> ${namaKelas}<br>
-                    <strong>Ustadz Pengampu:</strong> ${namaUstadz}<br>
+                    <strong>Ustadz / Ustadzah Pengampu:</strong> ${namaUstadz}<br>
                     <strong>Jumlah Santri:</strong> ${listSantri.length} Santri
                 </div>
                 <table class="pdf-table">
@@ -1601,29 +1810,71 @@
                 </table>
             `;
 
-            triggerPDFDownload(`LAPORAN KELAS ${namaKelas.toUpperCase()}`, `Laporan_Kelas_${namaKelas.replace(/\s+/g, '_')}.pdf`);
+            triggerPDFDownload(`LAPORAN DATA KELAS ${namaKelas.toUpperCase()}`, `Laporan_Kelas_${namaKelas.replace(/\s+/g, '_')}.pdf`);
         }
-        function cetakPDFHariIni() {
-            const today = document.getElementById('absen-date-picker').value || getTodayISOString();
-            const list = window.absensiData.filter(a => a.tanggal === today);
+
+        function cetakPDFFromDashboardModal() {
+            const today = getTodayISOString();
+            const wrapper = document.getElementById('pdf-table-wrapper');
+            let list = [];
+            let title = 'DAFTAR SANTRI TIDAK MASUK HARI INI';
+
+            if (activeDashboardModalType === 'izin') {
+                title = 'DAFTAR SANTRI IZIN HARI INI';
+                list = window.absensiData.filter(a => a.tanggal === today && (a.status === 'Izin Sakit' || a.status === 'Izin Pulang' || a.status === 'Izin Jaga Pos'));
+            } else {
+                title = 'DAFTAR SANTRI ALPA HARI INI';
+                list = window.absensiData.filter(a => a.tanggal === today && a.status === 'Alpa');
+            }
+
+            let rows = '';
+            if (list.length === 0) {
+                rows = `<tr><td colspan="5" style="text-align:center;">Tidak ada data.</td></tr>`;
+            } else {
+                list.forEach((abs, i) => {
+                    const santri = window.santriData.find(s => s.id === abs.santriId);
+                    const kelas = santri ? window.kelasData.find(k => k.id === santri.kelasId) : null;
+                    rows += `<tr>
+                        <td style="text-align:center;">${i + 1}</td>
+                        <td>${santri ? santri.nama : '-'}</td>
+                        <td>${kelas ? (kelas.nama || kelas.KELAS) : '-'}</td>
+                        <td>${getNamaUstadz(kelas)}</td>
+                        <td style="text-align:center; font-weight:bold;">${abs.status}</td>
+                    </tr>`;
+                });
+            }
+
+            wrapper.innerHTML = `<table class="pdf-table"><thead><tr><th style="width:35px;">No</th><th>Nama Santri</th><th>Kelas</th><th>Ustadz / Ustadzah</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`;
+            triggerPDFDownload(title, `${title.replace(/\s+/g, '_')}.pdf`, `Tanggal: ${formatDateIndonesian(today)}`);
+        }
+
+        function cetakPDFDetailSantri() {
+            if (!activeDetailSantriId) return;
+            const santri = window.santriData.find(s => s.id === activeDetailSantriId);
+            if (!santri) return;
+            const kelas = window.kelasData.find(k => k.id === santri.kelasId);
+            const namaKelas = kelas ? (kelas.nama || kelas.KELAS || '-') : '-';
+            const namaUstadz = getNamaUstadz(kelas);
+            const history = window.absensiData.filter(a => a.santriId === activeDetailSantriId);
+
             const wrapper = document.getElementById('pdf-table-wrapper');
             let rows = '';
+            if (history.length === 0) {
+                rows = `<tr><td colspan="3" style="text-align:center;">Belum ada riwayat absensi.</td></tr>`;
+            } else {
+                history.forEach((h, i) => {
+                    rows += `<tr><td style="text-align:center;">${i + 1}</td><td>${formatDateIndonesian(h.tanggal)}</td><td style="text-align:center; font-weight:bold;">${h.status}</td></tr>`;
+                });
+            }
 
-            list.forEach((abs, i) => {
-                const santri = window.santriData.find(s => s.id === abs.santriId);
-                const kelas = santri ? window.kelasData.find(k => k.id === santri.kelasId) : null;
-                const namaKelas = kelas ? (kelas.nama || kelas.KELAS || '-') : '-';
-                rows += `<tr><td style="text-align:center;">${i + 1}</td><td>${santri ? santri.nama : '-'}</td><td>${namaKelas}</td><td style="text-align:center; font-weight:bold;">${abs.status}</td></tr>`;
-            });
-
-            wrapper.innerHTML = `<table class="pdf-table"><thead><tr><th>No</th><th>Nama Santri</th><th>Kelas</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`;
-            triggerPDFDownload('LAPORAN ABSENSI HARIAN', 'Laporan_Absen_Harian.pdf');
-        }
-
-        function cetakPDFRekapKeseluruhan() {
-            const wrapper = document.getElementById('pdf-table-wrapper');
-            wrapper.innerHTML = `<p style="text-align:center;">Laporan Rekapitulasi Keseluruhan Absensi Santri</p>`;
-            triggerPDFDownload('REKAPITULASI ABSENSI KESELURUHAN', 'Rekap_Absensi.pdf');
+            wrapper.innerHTML = `
+                <div style="margin-bottom: 10px; font-size: 12px;">
+                    <strong>Nama Santri:</strong> ${santri.nama} (NIS: ${santri.nis || '-'})<br>
+                    <strong>Kelas:</strong> ${namaKelas} &mdash; <strong>Pengampu:</strong> ${namaUstadz}
+                </div>
+                <table class="pdf-table"><thead><tr><th style="width:40px;">No</th><th>Tanggal</th><th>Status Kehadiran</th></tr></thead><tbody>${rows}</tbody></table>
+            `;
+            triggerPDFDownload('RIWAYAT ABSENSI SANTRI', `Riwayat_Absensi_${santri.nama.replace(/\s+/g, '_')}.pdf`);
         }
 
         function openModalLogoSettings() {
