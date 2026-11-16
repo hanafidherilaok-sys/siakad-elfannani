@@ -1620,39 +1620,93 @@
             triggerPDFDownload('LAPORAN ABSENSI HARIAN', 'Laporan_Absen_Harian.pdf');
         }
 
-        function cetakPDFRekapKeseluruhan() {
-            const wrapper = document.getElementById('pdf-table-wrapper');
-            wrapper.innerHTML = `<p style="text-align:center;">Laporan Rekapitulasi Keseluruhan Absensi Santri</p>`;
-            triggerPDFDownload('REKAPITULASI ABSENSI KESELURUHAN', 'Rekap_Absensi.pdf');
-        }
+        async function cetakPDFRekapKeseluruhan() {
+            const { doc, startY, marginX, pageWidth } = await createBaseFormalPDF('REKAPITULASI ABSENSI KESELURUHAN');
+            let currentY = startY;
 
-        function openModalLogoSettings() {
-            document.getElementById('preview-custom-logo').src = currentLogo;
-            document.getElementById('modal-logo-settings').classList.remove('hidden');
-        }
+            if (!window.kelasData || window.kelasData.length === 0) {
+                doc.setFont('times', 'normal');
+                doc.setFontSize(10);
+                doc.text('Belum ada data kelas dan absensi untuk direkap.', pageWidth / 2, currentY + 6, { align: 'center' });
+                appendSignatureBlock(doc, currentY + 14, marginX, pageWidth);
+                doc.save('Rekap_Absensi_Keseluruhan.pdf');
+                return;
+            }
 
-        function handleLogoUpload(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                currentLogo = e.target.result;
-                applyLogoToElements();
-                document.getElementById('preview-custom-logo').src = currentLogo;
-            };
-            reader.readAsDataURL(file);
-        }
+            const pageHeight = doc.internal.pageSize.getHeight();
 
-        function resetLogoDefault() {
-            currentLogo = GOOGLE_DRIVE_LOGO_URL;
-            applyLogoToElements();
-            document.getElementById('preview-custom-logo').src = currentLogo;
-        }
+            window.kelasData.forEach((kelas) => {
+                const namaKelas = (kelas.nama || kelas.KELAS || 'Kelas').trim();
+                const namaUstadz = getNamaUstadz(kelas);
+                
+                // Cari santri berdasarkan kelasId ATAU kecocokan nama kelas (untuk menghindari error ID)
+                const listSantri = window.santriData.filter(s => {
+                    if (s.kelasId && kelas.id && s.kelasId === kelas.id) return true;
+                    if (s.kelas && s.kelas.trim().toLowerCase() === namaKelas.toLowerCase()) return true;
+                    return false;
+                });
 
-        window.onload = function() {
-            initLogoSystem();
-            initMockData();
-        };
-    </script>
-</body>
-</html>
+                // Pastikan ruang halaman cukup
+                if (currentY > pageHeight - 38) {
+                    doc.addPage();
+                    currentY = 16;
+                }
+
+                // Banner Judul Kelas
+                doc.setFillColor(236, 253, 245); // Emerald 50
+                doc.setDrawColor(4, 120, 87);
+                doc.setLineWidth(0.25);
+                doc.rect(marginX, currentY, pageWidth - marginX * 2, 7, 'FD');
+
+                doc.setFont('times', 'bold');
+                doc.setFontSize(9.5);
+                doc.setTextColor(6, 95, 70);
+                doc.text(
+                    `Kelas: ${namaKelas}  |  Pengampu: ${namaUstadz}  (${listSantri.length} Santri)`,
+                    marginX + 2.5,
+                    currentY + 4.8
+                );
+                currentY += 7;
+
+                const bodyRows = listSantri.length === 0
+                    ? [['-', 'Tidak ada santri di kelas ini.', '-', '-', '-', '-', '-']]
+                    : listSantri.map((santri, idx) => {
+                        const santriAbs = window.absensiData.filter(a => a.santriId === santri.id);
+                        const countHadir = santriAbs.filter(a => a.status === 'Hadir').length;
+                        const countSakit = santriAbs.filter(a => a.status === 'Izin Sakit').length;
+                        const countPulang = santriAbs.filter(a => a.status === 'Izin Pulang').length;
+                        const countJagaPos = santriAbs.filter(a => a.status === 'Izin Jaga Pos').length;
+                        const countAlpa = santriAbs.filter(a => a.status === 'Alpa').length;
+
+                        return [
+                            idx + 1,
+                            santri.nama,
+                            countHadir,
+                            countSakit,
+                            countPulang,
+                            countJagaPos,
+                            countAlpa
+                        ];
+                    });
+
+                doc.autoTable({
+                    ...getAutoTableBaseStyles(marginX),
+                    startY: currentY,
+                    head: [['No', 'Nama Santri', 'Hadir', 'Sakit', 'Pulang', 'Jaga Pos', 'Alpa']],
+                    body: bodyRows,
+                    columnStyles: {
+                        0: { halign: 'center', cellWidth: 10 },
+                        2: { halign: 'center', cellWidth: 15 },
+                        3: { halign: 'center', cellWidth: 15 },
+                        4: { halign: 'center', cellWidth: 16 },
+                        5: { halign: 'center', cellWidth: 19 },
+                        6: { halign: 'center', fontStyle: 'bold', cellWidth: 15 }
+                    }
+                });
+
+                currentY = doc.lastAutoTable.finalY + 6;
+            });
+
+            appendSignatureBlock(doc, currentY, marginX, pageWidth);
+            doc.save('Rekap_Absensi_Keseluruhan.pdf');
+        }
